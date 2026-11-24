@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>运营优化前 · 数据动态看板</title>
+  <script src="chart.umd.min.js"></script>
+  <script src="chartjs-plugin-datalabels.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #111a2e;
+      --panel-2: #15203a;
+      --line: #22304f;
+      --text: #e6edf7;
+      --muted: #8b9bb4;
+      --jd: #e1251b;
+      --tmall: #ff5000;
+      --pdd: #ff2146;
+      --dy-pink: #fe2c55;
+      --ks: #ff4d2e;
+      --web: #38bdf8;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --gray: #64748b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", -apple-system, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(56,189,248,.10), transparent 60%),
+        radial-gradient(1000px 500px at 90% 0%, rgba(254,44,85,.08), transparent 55%),
+        radial-gradient(900px 700px at 50% 120%, rgba(34,197,94,.08), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 22px;
+    }
+
+    .wrap { max-width: 1400px; margin: 0 auto; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 14px; margin-bottom: 22px;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand .logo {
+      width: 46px; height: 46px; border-radius: 13px;
+      background: linear-gradient(135deg, var(--web), var(--dy-pink));
+      display: grid; place-items: center; font-size: 22px;
+      box-shadow: 0 8px 26px rgba(56,189,248,.35);
+    }
+    .brand h1 { font-size: 22px; letter-spacing: .5px; }
+    .brand p { color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+    .live {
+      display: inline-flex; align-items: center; gap: 9px;
+      background: var(--panel); border: 1px solid var(--line);
+      padding: 9px 16px; border-radius: 30px; font-size: 13px; color: var(--muted);
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--amber);
+      box-shadow: 0 0 0 0 rgba(245,158,11,.6); animation: ping 1.6s infinite;
+    }
+    @keyframes ping {
+      0% { box-shadow: 0 0 0 0 rgba(245,158,11,.55); }
+      70% { box-shadow: 0 0 0 9px rgba(245,158,11,0); }
+      100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+    }
+
+    .grid { display: grid; gap: 18px; }
+    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    @media (max-width: 980px) { .grid.cols-3 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--line);
+      border-radius: 18px; padding: 18px 18px 8px;
+      position: relative; overflow: hidden;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
+    .card::before {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,.04) 45%, transparent 60%);
+      background-size: 220% 220%; animation: sheen 5s linear infinite; pointer-events: none;
+    }
+    @keyframes sheen { 0% { background-position: 180% 0; } 100% { background-position: -180% 0; } }
+
+    .card h2 {
+      font-size: 15px; display: flex; align-items: center; gap: 9px; margin-bottom: 4px;
+    }
+    .card h2 .tag { width: 9px; height: 9px; border-radius: 50%; }
+    .card-head { display: flex; justify-content: space-between; align-items: center; }
+    .card-head .note { font-size: 12px; color: var(--muted); }
+
+    .chart-box { position: relative; height: 250px; }
+
+    .kpis { display: flex; gap: 10px; margin-bottom: 8px; }
+    .kpi {
+      flex: 1; background: rgba(255,255,255,.03); border: 1px solid var(--line);
+      border-radius: 12px; padding: 9px 11px; min-width: 0;
+    }
+    .kpi .label { font-size: 11.5px; color: var(--muted); }
+    .kpi .value { font-size: 19px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .kpi .value small { font-size: 11px; color: var(--muted); font-weight: 500; }
+    .kpi .delta { font-size: 11px; margin-top: 2px; font-weight: 600; letter-spacing: .2px; }
+    .gap { color: var(--amber); }
+    .ahead { color: var(--green); }
+    .near { color: #2dd4bf; }
+
+    .legend { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; padding: 6px 0 12px; font-size: 14px; color: var(--muted); }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+    .footer { text-align: center; color: #5f6f88; font-size: 12px; margin-top: 24px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo">📉</div>
+      <div>
+        <h1>运营优化前 · 数据动态看板</h1>
+        <p>多平台优化前现状 vs 行业平均值 · 实时动态可视化</p>
+      </div>
+    </div>
+    <div class="live"><span class="dot"></span> 优化前基线 · 图表循环动态</div>
+  </header>
+
+  <!-- ============ 顶部概览：6 平台（优化前） ============ -->
+  <div class="grid cols-3" style="margin-bottom:18px">
+
+    <!-- 京东 -->
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="tag" style="background:var(--jd)"></span>京东 Jingdong</h2>
+        <span class="note">主图点击率 / 转化率</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">优化前主图点击率</div>
+          <div class="value">4.50<small>%</small></div>
+          <div class="delta">行业平均值 5%</div>
+          <div class="delta gap">▼ 落后行业 0.50pp</div>
+        </div>
+        <div class="kpi">
+          <div class="label">优化前转化率</div>
+          <div class="value">4.55<small>%</small></div>
+          <div class="delta">行业平均值 5%</div>
+          <div class="delta gap">▼ 落后行业 0.45pp</div>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="jdBar"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--gray)"></i>优化前</span>
+        <span><i style="background:var(--amber)"></i>行业平均值</span>
+      </div>
+    </div>
+
+    <!-- 抖音 -->
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="tag" style="background:var(--dy-pink)"></span>抖音 Douyin</h2>
+        <span class="note">完播率 / 转化率</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">优化前完播率</div>
+          <div class="value">14.50<small>%</small></div>
+          <div class="delta">行业平均值 16%</div>
+          <div class="delta gap">▼ 落后行业 1.50pp</div>
+        </div>
+        <div class="kpi">
+          <div class="label">优化前转化率</div>
+          <div class="value">0.80<small>%</small></div>
+          <div class="delta">行业平均值 0.98%</div>
+          <div class="delta gap">▼ 落后行业 0.18pp</div>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="dyBar"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--gray)"></i>优化前</span>
+        <span><i style="background:var(--amber)"></i>行业平均值</span>
+      </div>
+    </div>
+
+    <!-- 独立站 -->
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="tag" style="background:var(--web)"></span>独立站 官网</h2>
+        <span class="note">站外进店率 / 转化率</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">优化前站外进店率</div>
+          <div class="value">2.03<small>%</small></div>
+          <div class="delta">行业平均值 2.70%</div>
+          <div class="delta gap">▼ 落后行业 0.67pp</div>
+        </div>
+        <div class="kpi">
+          <div class="label">优化前转化率</div>
+          <div class="value">1.96<small>%</small></div>
+          <div class="delta">行业平均值 2.80%</div>
+          <div class="delta gap">▼ 落后行业 0.84pp</div>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="webBar"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--gray)"></i>优化前</span>
+        <span><i style="background:var(--amber)"></i>行业平均值</span>
+      </div>
+    </div>
+
+    <!-- 天猫 -->
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="tag" style="background:var(--tmall)"></span>天猫 Tmall</h2>
+        <span class="note">主图点击率 / 转化率</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">优化前主图点击率</div>
+          <div class="value">4.83<small>%</small></div>
+          <div class="delta">行业平均值 4.80%</div>
+          <div class="delta ahead">▲ 高于行业 0.03pp</div>
+        </div>
+        <div class="kpi">
+          <div class="label">优化前转化率</div>
+          <div class="value">4.85<small>%</small></div>
+          <div class="delta">行业平均值 4.80%</div>
+          <div class="delta ahead">▲ 高于行业 0.05pp</div>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="tmBar"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--gray)"></i>优化前</span>
+        <span><i style="background:var(--amber)"></i>行业平均值</span>
+      </div>
+    </div>
+
+    <!-- 拼多多 -->
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="tag" style="background:var(--pdd)"></span>拼多多 Pinduoduo</h2>
+        <span class="note">主图点击率 / 转化率</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">优化前主图点击率</div>
+          <div class="value">3.32<small>%</small></div>
+          <div class="delta">行业平均值 3.20%</div>
+          <div class="delta ahead">▲ 高于行业 0.12pp</div>
+        </div>
+        <div class="kpi">
+          <div class="label">优化前转化率</div>
+          <div class="value">2.90<small>%</small></div>
+          <div class="delta">行业平均值 2.80%</div>
+          <div class="delta ahead">▲ 高于行业 0.10pp</div>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="pddBar"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--gray)"></i>优化前</span>
+        <span><i style="background:var(--amber)"></i>行业平均值</span>
+      </div>
+    </div>
+
+    <!-- 快手 -->
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="tag" style="background:var(--ks)"></span>快手 Kuaishou</h2>
+        <span class="note">完播率 / 转化率</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">优化前完播率</div>
+          <div class="value">18.20<small>%</small></div>
+          <div class="delta">行业平均值 18%</div>
+          <div class="delta ahead">▲ 高于行业 0.20pp</div>
+        </div>
+        <div class="kpi">
+          <div class="label">优化前转化率</div>
+          <div class="value">18.50<small>%</small></div>
+          <div class="delta">行业平均值 1.10%</div>
+          <div class="delta ahead">▲ 高于行业 17.40pp</div>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="ksBar"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--gray)"></i>优化前</span>
+        <span><i style="background:var(--amber)"></i>行业平均值</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">运营优化前数据动态看板 · 数值静态 · 图表循环动画 · Chart.js 可视化</div>
+</div>
+
+<script>
+  Chart.defaults.color = '#8b9bb4';
+  Chart.defaults.font.family = '"Microsoft YaHei","PingFang SC",sans-serif';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+  // 注册数据标签插件
+  Chart.register(ChartDataLabels);
+
+  // 数据（优化前 / 行业平均值）
+  const channels = {
+    jd:  { labels: ['主图点击率', '转化率'],     before: [4.50, 4.55],  reference: [5, 5],       yMax: 6 },
+    dy:  { labels: ['完播率', '转化率'],         before: [14.50, 0.80], reference: [16, 0.98],   yMax: 18 },
+    web: { labels: ['站外进店率', '转化率'],     before: [2.03, 1.96],  reference: [2.70, 2.80], yMax: 4 },
+    tm:  { labels: ['主图点击率', '转化率'],     before: [4.83, 4.85],  reference: [4.80, 4.80], yMax: 6 },
+    pdd: { labels: ['主图点击率', '转化率'],     before: [3.32, 2.90],  reference: [3.20, 2.80], yMax: 4 },
+    ks:  { labels: ['完播率', '转化率'],         before: [18.20, 18.50], reference: [18, 1.10],  yMax: 22 }
+  };
+
+  // 存储每个图表的目标值，动画用 tween，tooltip 显示真实值
+  const trueValues = {};
+
+  const barOpts = (yMax) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,                    // 关闭内置动画，用自研循环驱动
+    scales: {
+      y: { beginAtZero: true, max: yMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { callback: v => v + '%' } },
+      x: { grid: { display: false } }
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0d1526', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+        callbacks: {
+          // 始终显示真实数据，不随动画波动
+          label: c => ` ${c.dataset.label}: ${trueValues[c.chart.canvas.id][c.datasetIndex][c.dataIndex]}%`
+        }
+      },
+      // 数据标签：显示真实数值（静态，不随动画变化）
+      datalabels: {
+        color: (c) => c.datasetIndex === 1 ? '#fde8c8' : '#cbd5e1',
+        anchor: 'end',
+        align: 'end',
+        offset: 2,
+        font: { size: 13, weight: 'bold' },
+        formatter: (v, c) => {
+          const tv = trueValues[c.chart.canvas.id][c.datasetIndex][c.dataIndex];
+          return tv + '%';
+        }
+      }
+    }
+  });
+
+  const makeBar = (ctx, c) => {
+    const g = ctx.createLinearGradient(0, 240, 0, 0);
+    g.addColorStop(0, c + '55'); g.addColorStop(1, c);
+    return g;
+  };
+
+  function buildBar(id, key) {
+    const d = channels[key];
+    const ctx = document.getElementById(id).getContext('2d');
+    trueValues[id] = [d.before, d.reference];
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [
+          { label: '优化前', data: [...d.before], backgroundColor: 'rgba(100,116,139,0.75)', borderRadius: 6 },
+          { label: '行业平均值', data: [...d.reference], backgroundColor: makeBar(ctx, '#f59e0b'), borderRadius: 6 }
+        ]
+      },
+      options: barOpts(d.yMax)
+    });
+    chart._target = [d.before, d.reference]; // 驱动动画用
+    return chart;
+  }
+
+  const charts = [
+    buildBar('jdBar', 'jd'),
+    buildBar('dyBar', 'dy'),
+    buildBar('webBar', 'web'),
+    buildBar('tmBar', 'tm'),
+    buildBar('pddBar', 'pdd'),
+    buildBar('ksBar', 'ks')
+  ];
+
+  // ========= 循环动态：柱子温和起伏，满帧流畅、无限循环 =========
+  // 数值在卡片与 tooltip 中始终显示真实值；此处仅驱动柱子高度动画。
+  const CYCLE = 9000;                 // 完整周期 9s
+  const GENTLE_MIN = 0.85;            // 柱子最低只降到 85%，轻微起伏、不闪烁
+  function sway(progress) {
+    return GENTLE_MIN + (1 - GENTLE_MIN) * (0.5 - 0.5 * Math.cos(2 * Math.PI * progress));
+  }
+  const startT = performance.now();
+  function loop(t) {
+    const elapsed = t - startT;
+    charts.forEach((chart, ci) => {
+      const progress = ((elapsed + ci * 500) % CYCLE) / CYCLE;
+      const p = sway(progress);
+      const target = chart._target;
+      chart.data.datasets.forEach((ds, di) => {
+        ds.data = target[di].map(v => v * p);
+      });
+      chart.update('none');
+    });
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+</script>
+
+  <!-- ===== 模块切换器（三个看板页共用，统一样式，避免逐页重复） ===== -->
+  <style id="dsh-modnav-style">
+    .modnav {
+      position: fixed; right: 18px; bottom: 18px; z-index: 9000;
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 9px; border-radius: 999px;
+      background: rgba(10, 14, 23, .88);
+      border: 1px solid rgba(148, 163, 184, .28);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                   "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    .modnav a, .modnav span { text-decoration: none; }
+    .modnav .mn-btn {
+      width: 38px; height: 38px; border-radius: 50%; flex: none;
+      display: flex; align-items: center; justify-content: center;
+      color: #e5e7eb; background: rgba(148, 163, 184, .12);
+      border: 1px solid rgba(148, 163, 184, .25);
+      font-size: 19px; line-height: 1; cursor: pointer;
+      transition: background .22s, border-color .22s, transform .22s, box-shadow .22s, color .22s;
+    }
+    .modnav .mn-btn:hover {
+      background: color-mix(in srgb, var(--mn-accent) 22%, transparent);
+      border-color: var(--mn-accent); color: #fff;
+      box-shadow: 0 0 16px color-mix(in srgb, var(--mn-accent) 55%, transparent);
+      transform: scale(1.08);
+    }
+    .modnav .mn-btn:active { transform: scale(.94); }
+    .modnav .mn-mid {
+      display: flex; flex-direction: column; line-height: 1.25;
+      padding: 0 8px; min-width: 96px; text-align: center;
+    }
+    .modnav .mn-pos { font-size: 11px; letter-spacing: 1.4px; color: var(--mn-accent); font-weight: 700; }
+    .modnav .mn-name { font-size: 11.5px; color: #9aa7bd; white-space: nowrap; }
+    .modnav .mn-home {
+      width: 34px; height: 34px; border-radius: 50%; flex: none;
+      display: flex; align-items: center; justify-content: center;
+      color: #9aa7bd; border: 1px solid rgba(148, 163, 184, .22);
+      font-size: 15px; transition: color .22s, border-color .22s, transform .22s;
+    }
+    .modnav .mn-home:hover { color: #fff; border-color: var(--mn-accent); transform: scale(1.08); }
+    @media (max-width: 560px) {
+      .modnav { right: 10px; bottom: 10px; padding: 6px 7px; gap: 6px; }
+      .modnav .mn-btn { width: 34px; height: 34px; font-size: 17px; }
+      .modnav .mn-mid { min-width: 0; padding: 0 4px; }
+      .modnav .mn-name { display: none; }
+    }
+  </style>
+  <nav class="modnav" style="--mn-accent:#38bdf8" aria-label="模块切换">
+    <a class="mn-btn" id="mn-prev" href="index.html" aria-label="上一个模块" title="上一个模块">‹</a>
+    <span class="mn-mid"><span class="mn-pos" id="mn-pos"></span><span class="mn-name" id="mn-name"></span></span>
+    <a class="mn-btn" id="mn-next" href="index.html" aria-label="下一个模块" title="下一个模块">›</a>
+    <a class="mn-home" href="index.html" aria-label="返回门户首页" title="返回门户首页">⌂</a>
+  </nav>
+  <script id="dsh-modnav-script">
+  (function () {
+    // 模块顺序与门户首页轮播严格一致（改首页卡片顺序时同步这里）
+    var MODULES = [
+      { href: 'tiktok-live.html',      name: 'TikTok 直播数据', accent: '#fe2c55' },
+      { href: 'operation-after.html',  name: '运营优化数据',     accent: '#22c55e' },
+      { href: 'operation-before.html', name: '运营优化前基线',   accent: '#f59e0b' }
+    ];
+    var nav = document.querySelector('.modnav');
+    if (!nav) return;
+
+    // 用当前文件名匹配模块（含子目录部署时只比对末段）
+    var here = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+    var i = -1;
+    for (var k = 0; k < MODULES.length; k++) {
+      if (MODULES[k].href.toLowerCase() === here) { i = k; break; }
+    }
+    if (i < 0) return;   // 非模块页则不显示
+
+    var n = MODULES.length;
+    var prev = MODULES[(i - 1 + n) % n];   // 循环：第一个的「上一个」是最后一个
+    var next = MODULES[(i + 1) % n];
+    var A = document.getElementById('mn-prev');
+    var B = document.getElementById('mn-next');
+    A.href = prev.href; B.href = next.href;
+    A.title = '上一个模块：' + prev.name; A.setAttribute('aria-label', '上一个模块：' + prev.name);
+    B.title = '下一个模块：' + next.name; B.setAttribute('aria-label', '下一个模块：' + next.name);
+    document.getElementById('mn-pos').textContent = (i + 1) + ' / ' + n;
+    document.getElementById('mn-name').textContent = MODULES[i].name;
+    nav.style.setProperty('--mn-accent', MODULES[i].accent);
+
+    // 键盘 ← → 直接切模块（输入框内不拦截）
+    document.addEventListener('keydown', function (e) {
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 'ArrowLeft')  { location.href = prev.href; }
+      if (e.key === 'ArrowRight') { location.href = next.href; }
+    });
+  })();
+  </script>
+  <!-- ===== /模块切换器 ===== -->
+</body>
+</html>
